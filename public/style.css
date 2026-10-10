@@ -4,6 +4,7 @@ body {
   min-height: 100vh;
   color: #fff;
   padding: 15px;
+  padding-bottom: 100px;
 }
 h1 {
   text-align: center;
@@ -12,15 +13,19 @@ h1 {
   font-size: 1.8rem;
   text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
 }
+h2, h3 { color: #FFD700; margin-bottom: 10px; font-size: 1.1rem; }
+h4 { color: #FFD700; margin-bottom: 8px; font-size: 0.95rem; }
+
 .card {
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.45);
   border-radius: 15px;
-  padding: 20px;
+  padding: 18px;
   max-width: 600px;
   margin: 0 auto 15px;
-  border: 2px solid rgba(255,215,0,0.5);
+  border: 2px solid rgba(255,215,0,0.4);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
-h2, h3 { color: #FFD700; margin-bottom: 10px; }
+
 input {
   width: 100%;
   padding: 12px;
@@ -28,7 +33,11 @@ input {
   border: none;
   margin: 8px 0;
   font-size: 1rem;
+  background: rgba(255,255,255,0.95);
+  color: #000;
 }
+input:focus { outline: 2px solid #FFD700; }
+
 button {
   background: linear-gradient(135deg, #FFD700, #FF8C00);
   color: #000;
@@ -40,9 +49,13 @@ button {
   margin: 5px 0;
   width: 100%;
   font-size: 1rem;
+  transition: transform 0.15s;
 }
-button:active { transform: scale(0.98); }
+button:active { transform: scale(0.97); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 hr { border: 1px solid rgba(255,255,255,0.2); margin: 15px 0; }
+
 .msg {
   text-align: center;
   padding: 10px;
@@ -51,20 +64,38 @@ hr { border: 1px solid rgba(255,255,255,0.2); margin: 15px 0; }
   font-weight: bold;
   min-height: 20px;
   color: #FFD700;
+  font-size: 0.95rem;
 }
+
+ul { list-style: none; padding: 5px; }
+ul li {
+  padding: 8px 12px;
+  background: rgba(255,215,0,0.15);
+  margin: 4px 0;
+  border-radius: 5px;
+  font-weight: bold;
+}
+
+/* टप बार */
 .top-bar {
   display: flex;
   justify-content: space-between;
   margin-bottom: 15px;
-  font-size: 1rem;
+  padding: 10px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 10px;
+  font-size: 0.95rem;
   color: #FFD700;
 }
-ul { list-style: none; padding: 5px; }
-ul li {
-  padding: 8px;
-  background: rgba(255,215,0,0.15);
-  margin: 4px 0;
-  border-radius: 5px;
+
+.turn-info {
+  text-align: center;
+  padding: 10px;
+  background: rgba(255,215,0,0.2);
+  border-radius: 10px;
+  margin-bottom: 15px;
+  font-size: 1.1rem;
+  color: #FFD700;
   font-weight: bold;
 }
 
@@ -75,6 +106,8 @@ ul li {
   gap: 10px;
   margin: 15px 0;
   flex-wrap: wrap;
+  min-height: 110px;
+  align-items: center;
 }
 .card-item {
   width: 70px;
@@ -86,31 +119,114 @@ ul li {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: bold;
   box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  border: 2px solid #ddd;
 }
 .card-item.red { color: #d00; }
 .card-item.black { color: #000; }
-.card-item .suit { font-size: 2rem; }
+.card-item .suit { font-size: 1.8rem; margin-top: 2px; }
+
+.card-item.hidden-card {
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  color: #FFD700;
+  font-size: 2rem;
+  border: 2px solid #FFD700;
+}
+
+/* एक्सन बटनहरू */
+.action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 15px 0;
+}
+.action-buttons button {
+  margin: 0;
+  font-size: 0.9rem;
+  padding: 10px;
+}
 
 /* खेलाडी सूची */
 .player-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
+  padding: 10px 12px;
   background: rgba(255,255,255,0.1);
   margin: 5px 0;
   border-radius: 8px;
+  font-size: 0.95rem;
 }
 .player-row .coins {
   color: #FFD700;
   font-weight: bold;
 }
-.coin-btn {
+.player-row.packed {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* रिक्वेस्ट बटन */
+.request-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: rgba(255,215,0,0.15);
+  margin: 5px 0;
+  border-radius: 8px;
+  gap: 8px;
+}
+.request-row span {
+  flex: 1;
+  font-weight: bold;
+}
+.request-row button {
   width: auto;
   padding: 6px 12px;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   margin: 0;
+}
+.btn-accept { background: linear-gradient(135deg, #11998e, #38ef7d); color: #fff; }
+.btn-reject { background: linear-gradient(135deg, #ff416c, #ff4b2b); color: #fff; }
+
+/* होस्ट प्यानल - सबै हात */
+.host-hand-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: rgba(255,255,255,0.1);
+  margin: 5px 0;
+  border-radius: 8px;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.host-hand-row .name {
+  font-weight: bold;
+  color: #FFD700;
+  min-width: 70px;
+}
+.host-hand-row .mini-hand {
+  display: flex;
+  gap: 4px;
+}
+.mini-card {
+  padding: 4px 8px;
+  background: #fff;
+  color: #000;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+.mini-card.red { color: #d00; }
+
+/* स्क्रिन साइज */
+@media (max-width: 400px) {
+  h1 { font-size: 1.4rem; }
+  .card-item { width: 60px; height: 85px; font-size: 1.2rem; }
+  .card-item .suit { font-size: 1.5rem; }
+  .action-buttons { grid-template-columns: 1fr; }
 }
