@@ -9,9 +9,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ⚠️ होस्ट पासवर्ड
 const HOST_PASSWORD = 'pgpk3535';
-
 const rooms = {};
 let latestRoomCode = null;
 
@@ -32,7 +30,6 @@ function createDeck() {
   return deck;
 }
 
-// ===== कार्ड शफल =====
 function shuffleDeck(deck) {
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -41,79 +38,96 @@ function shuffleDeck(deck) {
   return deck;
 }
 
-// ===== हात तुलना (साधारण) =====
+// ===== हात तुलना =====
+function rankValue(r) {
+  const map = { '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14 };
+  return map[r] || 0;
+}
+
 function getHandRank(hand) {
   const ranks = hand.map(c => c.rank);
   const suits = hand.map(c => c.suit);
-
-  // Rank मान
-  const rankValue = (r) => {
-    const map = { '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14 };
-    return map[r] || 0;
-  };
-
   const values = ranks.map(rankValue).sort((a, b) => b - a);
 
-  // ट्रेल (तिनवटै एकै)
+  // ट्रेल
   if (ranks[0] === ranks[1] && ranks[1] === ranks[2]) {
-    return { type: 'trail', value: values[0] };
+    return { type: 'trail', value: values[0], name: 'ट्रेल' };
   }
 
-  // प्योर सेक्वेन्स (एकै रङको लगातार)
   const isSameSuit = suits[0] === suits[1] && suits[1] === suits[2];
   const isSequence = (values[0] - values[1] === 1) && (values[1] - values[2] === 1);
 
+  // प्योर सेक्वेन्स
   if (isSameSuit && isSequence) {
-    return { type: 'pure-sequence', value: values[0] };
+    return { type: 'pure-sequence', value: values[0], name: 'प्योर सेक्वेन्स' };
   }
 
-  // सेक्वेन्स (लगातार)
+  // सेक्वेन्स
   if (isSequence) {
-    return { type: 'sequence', value: values[0] };
+    return { type: 'sequence', value: values[0], name: 'सेक्वेन्स' };
   }
 
-  // कलर (एकै रङ)
+  // कलर
   if (isSameSuit) {
-    return { type: 'color', value: values[0] };
+    return { type: 'color', value: values[0], name: 'कलर' };
   }
 
-  // पेयर (२ एकै)
+  // पेयर
   if (ranks[0] === ranks[1] || ranks[1] === ranks[2] || ranks[0] === ranks[2]) {
     let pairValue = 0;
     if (ranks[0] === ranks[1]) pairValue = values[0];
     else if (ranks[1] === ranks[2]) pairValue = values[1];
     else pairValue = values[0];
-    return { type: 'pair', value: pairValue };
+    return { type: 'pair', value: pairValue, name: 'पेयर' };
   }
 
-  // हाइ कार्ड
-  return { type: 'high-card', value: values[0] };
+  return { type: 'high-card', value: values[0], name: 'हाइ कार्ड' };
 }
 
-// ===== हात तुलना =====
 function compareHands(hand1, hand2) {
   const rankOrder = {
-    'trail': 6,
-    'pure-sequence': 5,
-    'sequence': 4,
-    'color': 3,
-    'pair': 2,
-    'high-card': 1
+    'trail': 6, 'pure-sequence': 5, 'sequence': 4,
+    'color': 3, 'pair': 2, 'high-card': 1
   };
-
   const r1 = getHandRank(hand1);
   const r2 = getHandRank(hand2);
-
   if (rankOrder[r1.type] > rankOrder[r2.type]) return 1;
   if (rankOrder[r1.type] < rankOrder[r2.type]) return -1;
-
   if (r1.value > r2.value) return 1;
   if (r1.value < r2.value) return -1;
-
   return 0;
 }
 
-// ===== रुम व्यवस्थापन =====
+// ===== रुम सिर्जना =====
+function createRoom(hostId, hostName) {
+  const code = generateRoomCode();
+  rooms[code] = {
+    hostId: hostId,
+    players: [{
+      id: hostId,
+      name: hostName,
+      coins: 0,
+      hand: [],
+      isHost: true,
+      packed: false,
+      seen: false,
+      currentBet: 0
+    }],
+    pendingRequests: [],
+    started: false,
+    gameOver: false,
+    deck: [],
+    pot: 0,
+    currentTurn: 0,
+    betAmount: 10,
+    gameNumber: 0,
+    log: []
+  };
+  latestRoomCode = code;
+  return code;
+}
+
+// ===== सकेट ह्यान्डलर =====
 io.on('connection', (socket) => {
   console.log('जोडियो:', socket.id);
 
@@ -123,47 +137,74 @@ io.on('connection', (socket) => {
     else callback({ success: false, message: '❌ गलत पासवर्ड!' });
   });
 
-  // ===== रुम बनाउने =====
-  socket.on('createRoom', ({ playerName }, callback) => {
-    const code = generateRoomCode();
-    rooms[code] = {
-      hostId: socket.id,
-      players: [{ id: socket.id, name: playerName, coins: 0, hand: [], isHost: true }],
-      started: false,
-      gameOver: false,
-      deck: []
-    };
-    latestRoomCode = code;
+  // ===== होस्टले रुम बनाउने =====
+  socket.on('createRoom', ({ hostName }, callback) => {
+    const code = createRoom(socket.id, hostName);
     socket.join(code);
     callback({ success: true, code });
+    io.to(code).emit('playerList', rooms[code].players.map(p => ({
+      name: p.name, coins: p.coins, isHost: p.isHost
+    })));
     console.log('रुम बन्यो:', code);
   });
 
-  // ===== रुम जोडिने =====
-  socket.on('joinRoom', ({ code, playerName }, callback) => {
+  // ===== खेलाडी जोडिने रिक्वेस्ट =====
+  socket.on('requestJoin', ({ code, playerName }, callback) => {
     const room = rooms[code];
     if (!room) return callback({ success: false, message: 'रुम भेटिएन' });
-    if (room.started) return callback({ success: false, message: 'खेल सुरु भइसक्यो' });
-    if (room.players.length >= 10) return callback({ success: false, message: 'रुम भरियो (१० जना)' });
+    if (room.players.length >= 10) return callback({ success: false, message: 'रुम भरियो' });
+    if (room.players.some(p => p.name === playerName)) {
+      return callback({ success: false, message: 'यो नाम पहिले नै छ' });
+    }
 
-    room.players.push({
-      id: socket.id,
-      name: playerName,
-      coins: 0,
-      hand: [],
-      isHost: false
-    });
-    socket.join(code);
-    callback({ success: true, code });
-
-    io.to(code).emit('playerList', room.players.map(p => ({
-      name: p.name,
-      coins: p.coins
-    })));
-    console.log(`${playerName} जोडियो रुम ${code} मा`);
+    // होस्टलाई रिक्वेस्ट पठाउने
+    const request = { id: socket.id, name: playerName };
+    room.pendingRequests.push(request);
+    io.to(room.hostId).emit('joinRequest', request);
+    callback({ success: true, message: 'होस्टको स्वीकृति पर्खंदै...' });
   });
 
-  // ===== कोइन दिने (होस्टले) =====
+  // ===== होस्टले स्वीकार गर्ने =====
+  socket.on('acceptPlayer', ({ code, playerId }, callback) => {
+    const room = rooms[code];
+    if (!room || room.hostId !== socket.id) return;
+
+    const req = room.pendingRequests.find(r => r.id === playerId);
+    if (!req) return;
+
+    room.players.push({
+      id: req.id,
+      name: req.name,
+      coins: 0,
+      hand: [],
+      isHost: false,
+      packed: false,
+      seen: false,
+      currentBet: 0
+    });
+    room.pendingRequests = room.pendingRequests.filter(r => r.id !== playerId);
+
+    io.to(req.id).emit('joinAccepted', { code });
+    io.to(code).emit('playerList', room.players.map(p => ({
+      name: p.name, coins: p.coins, isHost: p.isHost
+    })));
+    socket.emit('requestHandled', { name: req.name, accepted: true });
+  });
+
+  // ===== होस्टले अस्वीकार गर्ने =====
+  socket.on('rejectPlayer', ({ code, playerId }) => {
+    const room = rooms[code];
+    if (!room || room.hostId !== socket.id) return;
+
+    const req = room.pendingRequests.find(r => r.id === playerId);
+    if (!req) return;
+
+    io.to(req.id).emit('joinRejected', { message: 'होस्टले स्वीकार गरेन' });
+    room.pendingRequests = room.pendingRequests.filter(r => r.id !== playerId);
+    socket.emit('requestHandled', { name: req.name, accepted: false });
+  });
+
+  // ===== होस्टले कोइन दिने =====
   socket.on('giveCoins', ({ code, playerName, amount }) => {
     const room = rooms[code];
     if (!room || room.hostId !== socket.id) return;
@@ -172,11 +213,9 @@ io.on('connection', (socket) => {
     if (player) {
       player.coins += parseInt(amount);
       io.to(code).emit('playerList', room.players.map(p => ({
-        name: p.name,
-        coins: p.coins
+        name: p.name, coins: p.coins, isHost: p.isHost
       })));
       io.to(code).emit('coinGiven', { name: playerName, amount: amount });
-      console.log(`${playerName} लाई ${amount} कोइन दिइयो`);
     }
   });
 
@@ -185,26 +224,119 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room || room.hostId !== socket.id) return;
 
-    room.started = true;
+    // सबैलाई कार्ड बाँड्ने
     room.deck = shuffleDeck(createDeck());
-
-    // प्रत्येकलाई ३ कार्ड
     room.players.forEach(p => {
-      p.hand = [
-        room.deck.pop(),
-        room.deck.pop(),
-        room.deck.pop()
-      ];
+      p.hand = [room.deck.pop(), room.deck.pop(), room.deck.pop()];
+      p.packed = false;
+      p.seen = false;
+      p.currentBet = 0;
     });
 
-    io.to(code).emit('gameStarted');
-    console.log('खेल सुरु:', code);
+    room.started = true;
+    room.gameOver = false;
+    room.pot = 0;
+    room.currentTurn = 0;
+    room.gameNumber++;
+
+    // प्रत्येकलाई उसको कार्ड
+    room.players.forEach(p => {
+      io.to(p.id).emit('yourHand', { hand: p.hand, coins: p.coins });
+    });
+
+    // होस्टलाई सबैको कार्ड
+    io.to(room.hostId).emit('allHands', {
+      hands: room.players.map(p => ({ name: p.name, hand: p.hand }))
+    });
+
+    // सबैलाई खेल सुरु सन्देश
+    io.to(code).emit('gameStarted', {
+      players: room.players.map(p => ({
+        name: p.name, coins: p.coins, isHost: p.isHost
+      })),
+      turn: room.players[room.currentTurn].name,
+      pot: 0
+    });
+
+    console.log(`खेल ${room.gameNumber} सुरु (रुम ${code})`);
+  });
+
+  // ===== प्याक गर्ने =====
+  socket.on('pack', ({ code }) => {
+    const room = rooms[code];
+    if (!room) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player) return;
+
+    player.packed = true;
+
+    io.to(code).emit('playerPacked', {
+      name: player.name,
+      coins: player.coins
+    });
+
+    // अर्को पालो
+    nextTurn(room, code);
+  });
+
+  // ===== टेबलबाट उठ्ने =====
+  socket.on('leaveTable', ({ code }) => {
+    const room = rooms[code];
+    if (!room) return;
+    const idx = room.players.findIndex(p => p.id === socket.id);
+    if (idx === -1) return;
+
+    const player = room.players[idx];
+
+    io.to(code).emit('playerLeft', {
+      name: player.name,
+      coins: player.coins
+    });
+
+    room.players.splice(idx, 1);
+    socket.leave(code);
+
+    if (room.players.length === 0) {
+      delete rooms[code];
+    } else {
+      io.to(code).emit('playerList', room.players.map(p => ({
+        name: p.name, coins: p.coins, isHost: p.isHost
+      })));
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('डिस्कनेक्ट:', socket.id);
   });
 });
+
+// ===== पालो घुमाउने =====
+function nextTurn(room, code) {
+  const active = room.players.filter(p => !p.packed);
+  if (active.length <= 1) {
+    // खेल समाप्त — जित्नेलाई बोटी
+    if (active.length === 1) {
+      active[0].coins += room.pot;
+      io.to(code).emit('gameWinner', {
+        name: active[0].name,
+        coins: active[0].coins,
+        amount: room.pot
+      });
+    }
+    return;
+  }
+
+  // अर्को सक्रिय खेलाडी खोज्ने
+  let attempts = 0;
+  do {
+    room.currentTurn = (room.currentTurn + 1) % room.players.length;
+    attempts++;
+  } while (room.players[room.currentTurn].packed && attempts < 20);
+
+  io.to(code).emit('turnChanged', {
+    turn: room.players[room.currentTurn].name
+  });
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
