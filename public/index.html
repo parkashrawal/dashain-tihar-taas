@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ne">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>दशैं तिहार तास</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>🃏 दशैं तिहार तास 🃏</h1>
+
+<!-- ल्यान्डिङ पेज -->
+<div id="landing" class="card">
+  <h2>स्वागत छ!</h2>
+  <input id="playerName" placeholder="तपाईंको नाम" maxlength="15">
+  <button onclick="showHostLogin()">🎩 होस्ट लगइन</button>
+  <hr>
+  <input id="roomCode" placeholder="रुम कोड" maxlength="4" style="text-transform:uppercase">
+  <button onclick="joinRoom()">रुम जोडिनुहोस्</button>
+  <div id="landingMsg" class="msg"></div>
+</div>
+
+<!-- होस्ट लगइन -->
+<div id="hostLoginBox" class="card" style="display:none">
+  <h2>🎩 होस्ट लगइन</h2>
+  <input id="hostPassword" placeholder="होस्ट पासवर्ड" type="password">
+  <button onclick="hostLogin()">लगइन गर्नुहोस्</button>
+  <button onclick="backToLanding()" style="background:rgba(255,255,255,0.2);color:#fff">← फिर्ता</button>
+  <div id="hostLoginMsg" class="msg"></div>
+</div>
+
+<!-- प्रतीक्षा कोठा -->
+<div id="waiting" class="card" style="display:none">
+  <h2>रुम कोड: <span id="roomCodeDisplay"></span></h2>
+  <p>यो कोड साथीहरूलाई पठाउनुहोस्</p>
+  <h3>खेलाडीहरू (<span id="playerCount">0</span>/10)</h3>
+  <ul id="playerList"></ul>
+  <button id="startBtn" onclick="startGame()" style="display:none">🎮 खेल सुरु गर्नुहोस्</button>
+  <div id="waitMsg" class="msg"></div>
+</div>
+
+<!-- खेल स्क्रिन -->
+<div id="game" class="card" style="display:none">
+  <div class="top-bar">
+    <div>रुम: <b id="gameRoomCode"></b></div>
+    <div>तपाईंको कोइन: <b id="myCoins">0</b></div>
+  </div>
+
+  <h3>तपाईंको कार्ड</h3>
+  <div id="myHand" class="hand"></div>
+
+  <h3>सबै खेलाडी</h3>
+  <div id="allPlayers"></div>
+
+  <div id="gameMsg" class="msg"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
