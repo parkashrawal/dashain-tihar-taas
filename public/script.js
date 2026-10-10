@@ -7,7 +7,6 @@ let myCoins = 0;
 let hasSeen = false;
 let currentTurn = '';
 
-// ===== पेज ह्यान्डलिङ =====
 function showPage(id) {
   ['landing','hostLoginBox','waiting','game','hostPanel'].forEach(x => {
     const el = document.getElementById(x);
@@ -64,25 +63,33 @@ function requestJoin() {
   if (!code) return alert('रुम कोड लेख्नुहोस्');
 
   socket.emit('requestJoin', { code, playerName: myName }, (res) => {
-    if (res.success) {
-      roomCode = code;
-      document.getElementById('landingMsg').textContent = res.message;
-    } else {
-      document.getElementById('landingMsg').textContent = res.message;
-    }
+    document.getElementById('landingMsg').textContent = res.message;
   });
 }
 
-// ===== हेर्न मात्र =====
+// ===== दर्शक (लिंकबाट, कोड बिना) =====
 function viewGame() {
-  const code = document.getElementById('joinCode').value.trim().toUpperCase();
-  if (!code) return alert('रुम कोड लेख्नुहोस्');
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('room');
 
-  roomCode = code;
+  if (!code) {
+    alert('यो लिंकबाट मात्र हेर्न सकिन्छ');
+    return;
+  }
+
+  roomCode = code.toUpperCase();
   isHost = false;
-  showPage('game');
-  document.getElementById('gameMsg').textContent = 'तपाईं दर्शक हुनुहुन्छ';
-  document.getElementById('actionButtons').style.display = 'none';
+  myName = document.getElementById('playerName').value.trim() || 'दर्शक';
+
+  socket.emit('viewAsSpectator', { code: roomCode, viewerName: myName }, (res) => {
+    if (res.success) {
+      showPage('game');
+      document.getElementById('gameMsg').textContent = '👀 तपाईं दर्शक हुनुहुन्छ';
+      document.getElementById('actionButtons').style.display = 'none';
+    } else {
+      alert(res.message);
+    }
+  });
 }
 
 // ===== इभेन्टहरू =====
@@ -98,14 +105,16 @@ socket.on('joinRejected', ({ message }) => {
   document.getElementById('landingMsg').textContent = message;
 });
 
+socket.on('spectatorJoined', ({ name }) => {
+  console.log(`${name} दर्शक बन्यो`);
+});
+
 socket.on('requestHandled', ({ name, accepted }) => {
   const msg = accepted ? `✅ ${name} स्वीकार` : `❌ ${name} अस्वीकार`;
   document.getElementById('waitMsg').textContent = msg;
 });
 
-// ===== खेलाडी सूची =====
 socket.on('playerList', (list) => {
-  // प्रतीक्षा कोठा
   const countEl = document.getElementById('playerCount');
   if (countEl) countEl.textContent = list.length;
 
@@ -116,7 +125,6 @@ socket.on('playerList', (list) => {
     ).join('');
   }
 
-  // खेल स्क्रिनमा
   const allDiv = document.getElementById('allPlayers');
   if (allDiv) {
     allDiv.innerHTML = list.map(p =>
@@ -127,7 +135,6 @@ socket.on('playerList', (list) => {
     ).join('');
   }
 
-  // होस्ट प्यानलमा
   const hostDiv = document.getElementById('hostPlayers');
   if (hostDiv) {
     hostDiv.innerHTML = list.map(p =>
@@ -140,11 +147,9 @@ socket.on('playerList', (list) => {
   }
 });
 
-// ===== रिक्वेस्ट आउँदा (होस्टको स्क्रिनमा) =====
 socket.on('joinRequest', (req) => {
   const div = document.getElementById('pendingRequests');
   if (!div) return;
-
   const row = document.createElement('div');
   row.className = 'request-row';
   row.id = 'req-' + req.id;
@@ -156,21 +161,18 @@ socket.on('joinRequest', (req) => {
   div.appendChild(row);
 });
 
-// ===== होस्टले स्वीकार =====
 function acceptPlayer(playerId) {
   socket.emit('acceptPlayer', { code: roomCode, playerId });
   const el = document.getElementById('req-' + playerId);
   if (el) el.remove();
 }
 
-// ===== होस्टले अस्वीकार =====
 function rejectPlayer(playerId) {
   socket.emit('rejectPlayer', { code: roomCode, playerId });
   const el = document.getElementById('req-' + playerId);
   if (el) el.remove();
 }
 
-// ===== कोइन दिने (होस्टले) =====
 function giveCoins(playerName) {
   const amount = prompt(`${playerName} लाई कति कोइन दिनुहुन्छ?`, '100');
   if (amount && !isNaN(amount)) {
@@ -184,7 +186,6 @@ socket.on('coinGiven', ({ name, amount }) => {
   if (hostMsg) hostMsg.textContent = `🪙 ${name} लाई ${amount} कोइन दिइयो`;
 });
 
-// ===== खेल सुरु =====
 function startGame() {
   socket.emit('startGame', { code: roomCode });
 }
@@ -194,27 +195,22 @@ socket.on('gameStarted', ({ players, turn, pot }) => {
   document.getElementById('currentTurn').textContent = turn;
   currentTurn = turn;
 
-  if (isHost) {
-    showPage('hostPanel');
-  } else {
+  if (isHost) showPage('hostPanel');
+  else {
     showPage('game');
     document.getElementById('actionButtons').style.display = 'grid';
   }
-
   document.getElementById('gameMsg').textContent = '🎮 खेल सुरु भयो!';
 });
 
-// ===== तपाईंको कार्ड =====
 socket.on('yourHand', ({ hand, coins }) => {
   myHand = hand;
   myCoins = coins;
   hasSeen = false;
-
   document.getElementById('myCoins').textContent = coins;
   renderMyHand(false);
 });
 
-// ===== होस्टलाई सबैको कार्ड =====
 socket.on('allHands', ({ hands }) => {
   const div = document.getElementById('hostAllHands');
   if (!div) return;
@@ -230,11 +226,9 @@ socket.on('allHands', ({ hands }) => {
   }).join('');
 });
 
-// ===== कार्ड रेन्डर =====
 function renderMyHand(showCards) {
   const div = document.getElementById('myHand');
   if (!div) return;
-
   if (!showCards) {
     div.innerHTML = `
       <div class="card-item hidden-card">🂠</div>
@@ -243,7 +237,6 @@ function renderMyHand(showCards) {
     `;
     return;
   }
-
   div.innerHTML = myHand.map(card => {
     const isRed = card.suit === '♥' || card.suit === '♦';
     return `<div class="card-item ${isRed ? 'red' : 'black'}">
@@ -253,24 +246,21 @@ function renderMyHand(showCards) {
   }).join('');
 }
 
-// ===== ब्लाइन्ड चल्ने =====
 function blindPlay() {
-  if (hasSeen) return alert('तपाईंले कार्ड हेरिसक्नुभयो — सीन चल्नुहोस्');
+  if (hasSeen) return alert('कार्ड हेरिसक्नुभयो — सीन चल्नुहोस्');
   if (myCoins < 10) return alert('पर्याप्त कोइन छैन');
   myCoins -= 10;
   document.getElementById('myCoins').textContent = myCoins;
   document.getElementById('gameMsg').textContent = '🎴 ब्लाइन्ड चाल्यो';
 }
 
-// ===== कार्ड हेर्ने =====
 function seeCards() {
-  if (hasSeen) return alert('तपाईंले पहिले नै हेर्नुभयो');
+  if (hasSeen) return alert('पहिले नै हेर्नुभयो');
   hasSeen = true;
   renderMyHand(true);
   document.getElementById('gameMsg').textContent = '👀 कार्ड हेर्यो';
 }
 
-// ===== सीन चल्ने =====
 function seenPlay() {
   if (!hasSeen) return alert('पहिले कार्ड हेर्नुहोस्');
   if (myCoins < 20) return alert('पर्याप्त कोइन छैन');
@@ -279,43 +269,36 @@ function seenPlay() {
   document.getElementById('gameMsg').textContent = '💰 सीन चाल्यो';
 }
 
-// ===== प्याक गर्ने =====
 function packGame() {
   socket.emit('pack', { code: roomCode });
   document.getElementById('gameMsg').textContent = '🏳️ प्याक गर्यो';
   document.getElementById('actionButtons').style.display = 'none';
 }
 
-// ===== टेबलबाट उठ्ने =====
 function leaveTable() {
   if (!confirm('टेबलबाट उठ्न निश्चित?')) return;
   socket.emit('leaveTable', { code: roomCode });
   showPage('landing');
 }
 
-// ===== पालो परिवर्तन =====
 socket.on('turnChanged', ({ turn }) => {
   currentTurn = turn;
   document.getElementById('currentTurn').textContent = turn;
 });
 
-// ===== प्याक भयो =====
 socket.on('playerPacked', ({ name, coins }) => {
   document.getElementById('gameMsg').textContent = `🏳️ ${name} प्याक गर्यो (${coins} कोइन)`;
 });
 
-// ===== खेलबाट बाहिरियो =====
 socket.on('playerLeft', ({ name, coins }) => {
   document.getElementById('gameMsg').textContent = `🚪 ${name} बाहिरियो (${coins} कोइन बाँकी)`;
 });
 
-// ===== खेल जित्यो =====
 socket.on('gameWinner', ({ name, coins, amount }) => {
   document.getElementById('gameMsg').textContent = `🏆 ${name} ले जित्यो! +${amount} कोइन`;
   document.getElementById('potAmount').textContent = 0;
 });
 
-// ===== सुरुवात =====
 socket.on('connect', () => {
   console.log('सर्भरसँग जोडियो');
 });
